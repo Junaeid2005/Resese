@@ -233,6 +233,11 @@ export const AdminOrderManagement: React.FC<AdminOrderManagementProps> = ({ orde
                       >
                         {order.paymentStatus}
                       </span>
+                      <span className="text-[10px] text-stone-400 block mt-0.5 truncate max-w-[130px]">
+                        {order.paymentMethod === 'Credit / Debit Card (Stripe)'
+                          ? '💳 Stripe Card'
+                          : '💵 Cash on Delivery'}
+                      </span>
                     </td>
 
                     <td className="py-4 px-6">{getStatusBadge(order.status)}</td>
@@ -352,12 +357,25 @@ export const AdminOrderManagement: React.FC<AdminOrderManagementProps> = ({ orde
                 </table>
               </div>
 
-              <div className="pt-3 flex justify-end gap-6 text-xs text-stone-600 pr-2">
-                <span>Subtotal: €{selectedOrder.subtotal.toFixed(2)}</span>
-                <span>Delivery: €{selectedOrder.deliveryFee.toFixed(2)}</span>
-                <span className="font-extrabold text-stone-900 text-sm">
-                  Total: €{selectedOrder.total.toFixed(2)}
-                </span>
+              <div className="pt-3 flex flex-wrap items-center justify-between gap-4 text-xs text-stone-600 pr-2">
+                <div className="space-y-0.5">
+                  <span className="font-bold text-stone-800">
+                    Payment Method:{' '}
+                    <span className="text-orange-600 font-extrabold">{selectedOrder.paymentMethod}</span>
+                  </span>
+                  {selectedOrder.stripePaymentIntentId && (
+                    <p className="text-[11px] font-mono text-stone-400">
+                      Stripe Ref: {selectedOrder.stripePaymentIntentId}
+                    </p>
+                  )}
+                </div>
+                <div className="flex items-center gap-4">
+                  <span>Subtotal: €{selectedOrder.subtotal.toFixed(2)}</span>
+                  <span>Delivery: €{selectedOrder.deliveryFee.toFixed(2)}</span>
+                  <span className="font-extrabold text-stone-900 text-sm">
+                    Total: €{selectedOrder.total.toFixed(2)}
+                  </span>
+                </div>
               </div>
             </div>
 

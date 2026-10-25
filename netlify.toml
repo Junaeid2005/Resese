@@ -2,6 +2,12 @@
   command = "npm run build"
   publish = "dist"
 
+# API redirect to serverless functions
+[[redirects]]
+  from = "/api/create-payment-intent"
+  to = "/.netlify/functions/create-payment-intent"
+  status = 200
+
 # SPA redirect rule so browser page refreshes on any route route correctly to index.html
 [[redirects]]
   from = "/*"

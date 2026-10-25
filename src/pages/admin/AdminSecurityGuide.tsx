@@ -226,9 +226,13 @@ setAdminRole('TARGET_USER_UID');`;
           </div>
 
           <div className="p-3 bg-stone-50 rounded-2xl border border-stone-200 space-y-1">
-            <strong className="text-stone-900 block">Step 4: Email Verification Flow</strong>
+            <strong className="text-stone-900 block">Step 5: Stripe Environment Variables on Netlify</strong>
             <p>
-              Enable Email/Password in Firebase Console → Authentication → Sign-in method. Firebase will send verification emails with secure action URLs automatically.
+              In your Netlify Site Configuration → <strong>Environment variables</strong>, add:
+              <br />
+              • <code>STRIPE_SECRET_KEY</code>: <code>sk_live_...</code> (or your test key <code>sk_test_...</code>)
+              <br />
+              • <code>VITE_STRIPE_PUBLISHABLE_KEY</code>: <code>pk_live_...</code> (or test key <code>pk_test_...</code>)
             </p>
           </div>
         </div>

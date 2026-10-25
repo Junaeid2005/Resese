@@ -1,6 +1,6 @@
 {
-  "name": "Savory Bite - Restaurant Management & Online Ordering",
-  "description": "Full-stack modern restaurant ordering web application with customer portal, persistent shopping cart, and comprehensive admin dashboard for menu, orders, expenses, and analytics.",
+  "name": "savory-bite-restaurant",
+  "description": "Savory Bite - Modern full-stack restaurant ordering web application with customer portal, persistent shopping cart, and comprehensive admin dashboard for menu, orders, expenses, and analytics.",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

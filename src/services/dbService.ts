@@ -216,6 +216,9 @@ export interface CreateOrderParams {
   deliveryInstructions?: string;
   items: CartItem[];
   deliveryFee: number;
+  paymentMethod?: 'Cash on Delivery' | 'Credit / Debit Card (Stripe)';
+  paymentStatus?: PaymentStatus;
+  stripePaymentIntentId?: string;
 }
 
 export async function placeCustomerOrder(params: CreateOrderParams): Promise<Order> {
@@ -267,6 +270,9 @@ export async function placeCustomerOrder(params: CreateOrderParams): Promise<Ord
   const orderId = `SB-${Math.floor(100000 + Math.random() * 900000)}`;
   const now = new Date().toISOString();
 
+  const chosenPaymentMethod = params.paymentMethod || 'Cash on Delivery';
+  const chosenPaymentStatus = params.paymentStatus || (chosenPaymentMethod === 'Credit / Debit Card (Stripe)' ? 'paid' : 'unpaid');
+
   const newOrder: Order = {
     id: orderId,
     customerId: params.customerId,
@@ -279,16 +285,17 @@ export async function placeCustomerOrder(params: CreateOrderParams): Promise<Ord
     subtotal: computedSubtotal,
     deliveryFee: finalDeliveryFee,
     total: computedTotal,
-    paymentMethod: 'Cash on Delivery',
-    paymentStatus: 'unpaid',
-    status: 'pending',
+    paymentMethod: chosenPaymentMethod,
+    paymentStatus: chosenPaymentStatus,
+    stripePaymentIntentId: params.stripePaymentIntentId,
+    status: chosenPaymentMethod === 'Credit / Debit Card (Stripe)' ? 'confirmed' : 'pending',
     createdAt: now,
     updatedAt: now,
     statusHistory: [
       {
-        status: 'pending',
+        status: chosenPaymentMethod === 'Credit / Debit Card (Stripe)' ? 'confirmed' : 'pending',
         timestamp: now,
-        note: 'Order submitted with Cash on Delivery',
+        note: `Order submitted via ${chosenPaymentMethod}${chosenPaymentStatus === 'paid' ? ' (Payment Confirmed)' : ''}`,
       },
     ],
   };

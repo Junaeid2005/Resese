@@ -64,8 +64,9 @@ export interface Order {
   subtotal: number;
   deliveryFee: number;
   total: number;
-  paymentMethod: 'Cash on Delivery';
+  paymentMethod: 'Cash on Delivery' | 'Credit / Debit Card (Stripe)';
   paymentStatus: PaymentStatus;
+  stripePaymentIntentId?: string;
   status: OrderStatus;
   createdAt: string;
   updatedAt: string;

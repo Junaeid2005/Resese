@@ -9,27 +9,60 @@ import {
   ArrowRight,
   RefreshCw,
   Mail,
-  FileText,
   UtensilsCrossed,
+  CreditCard,
+  Lock,
 } from 'lucide-react';
+import { loadStripe } from '@stripe/stripe-js';
+import { Elements } from '@stripe/react-stripe-js';
 import { useAuth } from '../contexts/AuthContext';
 import { useCart } from '../contexts/CartContext';
 import { placeCustomerOrder } from '../services/dbService';
 import { Order } from '../types';
+import { StripeCardForm } from '../components/StripeCardForm';
+
+const getStripePromise = () => {
+  const envKey = (import.meta as any).env?.VITE_STRIPE_PUBLISHABLE_KEY;
+  if (envKey) return loadStripe(envKey);
+
+  return fetch('/api/stripe-publishable-key')
+    .then((res) => (res.ok ? res.json() : { publishableKey: '' }))
+    .then((data) => {
+      if (data.publishableKey) {
+        return loadStripe(data.publishableKey);
+      }
+      return null;
+    })
+    .catch(() => null);
+};
+
+const stripePromise = getStripePromise();
 
 interface CheckoutPageProps {
   onNavigate: (tab: string) => void;
 }
 
 export const CheckoutPage: React.FC<CheckoutPageProps> = ({ onNavigate }) => {
-  const { currentUser, userProfile, isEmailVerified, sendVerificationEmail, refreshEmailVerification, updateCustomerProfile } = useAuth();
+  const {
+    currentUser,
+    userProfile,
+    isEmailVerified,
+    sendVerificationEmail,
+    refreshEmailVerification,
+    updateCustomerProfile,
+  } = useAuth();
   const { items, subtotal, deliveryFee, total } = useCart();
 
-  const [customerName, setCustomerName] = useState(userProfile?.displayName || currentUser?.displayName || '');
+  const [customerName, setCustomerName] = useState(
+    userProfile?.displayName || currentUser?.displayName || ''
+  );
   const [customerPhone, setCustomerPhone] = useState(userProfile?.phone || '');
   const [deliveryAddress, setDeliveryAddress] = useState(userProfile?.address || '');
   const [deliveryInstructions, setDeliveryInstructions] = useState('');
   const [saveAsDefault, setSaveAsDefault] = useState(true);
+
+  // Payment method selection
+  const [paymentMethod, setPaymentMethod] = useState<'card' | 'cod'>('card');
 
   const [submitting, setSubmitting] = useState(false);
   const [orderError, setOrderError] = useState<string | null>(null);
@@ -82,7 +115,6 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({ onNavigate }) => {
     );
   }
 
-  // Check email verification status
   const handleCheckVerification = async () => {
     setCheckingVerification(true);
     const verified = await refreshEmailVerification();
@@ -105,25 +137,28 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({ onNavigate }) => {
     }
   };
 
-  // Submit Order
-  const handleSubmitOrder = async (e: React.FormEvent) => {
+  // Validate fields before submission
+  const validateForm = () => {
+    if (!isEmailVerified) {
+      setOrderError('You must verify your email address before placing an order.');
+      return false;
+    }
+    if (!customerName.trim() || !customerPhone.trim() || !deliveryAddress.trim()) {
+      setOrderError('Please complete all required fields (Name, Phone, and Delivery Address).');
+      return false;
+    }
+    return true;
+  };
+
+  // Cash on Delivery Submit
+  const handleCODSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setOrderError(null);
 
-    if (!isEmailVerified) {
-      setOrderError('You must verify your email address before placing an order.');
-      return;
-    }
-
-    if (!customerName.trim() || !customerPhone.trim() || !deliveryAddress.trim()) {
-      setOrderError('Please complete all required fields (Name, Phone, and Delivery Address).');
-      return;
-    }
+    if (!validateForm()) return;
 
     try {
       setSubmitting(true);
-
-      // Optionally save customer phone & address for future orders
       if (saveAsDefault) {
         await updateCustomerProfile({
           displayName: customerName.trim(),
@@ -132,7 +167,6 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({ onNavigate }) => {
         });
       }
 
-      // Authoritative order placement in Firestore
       const order = await placeCustomerOrder({
         customerId: currentUser.uid,
         customerName: customerName.trim(),
@@ -142,19 +176,59 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({ onNavigate }) => {
         deliveryInstructions: deliveryInstructions.trim(),
         items,
         deliveryFee,
+        paymentMethod: 'Cash on Delivery',
+        paymentStatus: 'unpaid',
       });
 
       setPlacedOrder(order);
     } catch (err: any) {
       console.error('Order submission error:', err);
-      setOrderError(err.message || 'Failed to submit order. Please verify your details and try again.');
+      setOrderError(err.message || 'Failed to submit order. Please try again.');
     } finally {
       setSubmitting(false);
     }
   };
 
-  // Order Success Confirmation Screen
+  // Stripe Card Payment Success
+  const handleStripeSuccess = async (paymentIntentId: string) => {
+    if (!validateForm()) return;
+
+    try {
+      setSubmitting(true);
+      if (saveAsDefault) {
+        await updateCustomerProfile({
+          displayName: customerName.trim(),
+          phone: customerPhone.trim(),
+          address: deliveryAddress.trim(),
+        });
+      }
+
+      const order = await placeCustomerOrder({
+        customerId: currentUser.uid,
+        customerName: customerName.trim(),
+        customerEmail: currentUser.email || '',
+        customerPhone: customerPhone.trim(),
+        deliveryAddress: deliveryAddress.trim(),
+        deliveryInstructions: deliveryInstructions.trim(),
+        items,
+        deliveryFee,
+        paymentMethod: 'Credit / Debit Card (Stripe)',
+        paymentStatus: 'paid',
+        stripePaymentIntentId: paymentIntentId,
+      });
+
+      setPlacedOrder(order);
+    } catch (err: any) {
+      console.error('Error saving paid order:', err);
+      setOrderError(err.message || 'Payment succeeded, but recording order failed. Please contact support.');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  // Order Confirmation View
   if (placedOrder) {
+    const isPaidOnline = placedOrder.paymentStatus === 'paid';
     return (
       <div className="max-w-3xl mx-auto px-4 sm:px-6 py-12 space-y-8 animate-in fade-in duration-300">
         <div className="bg-white rounded-3xl p-8 sm:p-10 border border-stone-200/90 shadow-xl text-center space-y-6">
@@ -164,13 +238,15 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({ onNavigate }) => {
 
           <div className="space-y-2">
             <span className="text-xs font-bold uppercase tracking-widest text-emerald-700 bg-emerald-50 px-3 py-1 rounded-full">
-              Order Received Successfully
+              {isPaidOnline ? 'Payment & Order Confirmed' : 'Order Received Successfully'}
             </span>
             <h1 className="text-3xl sm:text-4xl font-extrabold font-['Playfair_Display',serif] text-stone-900">
               Thank You for Your Order!
             </h1>
             <p className="text-stone-600 text-sm sm:text-base max-w-lg mx-auto">
-              Our culinary team has received your order and our chefs are firing up the kitchen now.
+              {isPaidOnline
+                ? `Your online payment of €${placedOrder.total.toFixed(2)} was successfully processed via Stripe. Our chefs are preparing your food now!`
+                : 'Our culinary team has received your order and our chefs are firing up the kitchen now.'}
             </p>
           </div>
 
@@ -189,9 +265,31 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({ onNavigate }) => {
             </div>
 
             <div className="flex justify-between items-center text-sm">
-              <span className="text-stone-500">Payment Method:</span>
-              <span className="font-bold text-amber-700">Cash on Delivery (€{placedOrder.total.toFixed(2)})</span>
+              <span className="text-stone-500">Payment Status:</span>
+              <span
+                className={`font-bold flex items-center gap-1.5 ${
+                  isPaidOnline ? 'text-emerald-700' : 'text-amber-700'
+                }`}
+              >
+                {isPaidOnline ? (
+                  <>
+                    <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                    <span>Paid Online via Card (€{placedOrder.total.toFixed(2)})</span>
+                  </>
+                ) : (
+                  <span>Cash on Delivery (€{placedOrder.total.toFixed(2)})</span>
+                )}
+              </span>
             </div>
+
+            {placedOrder.stripePaymentIntentId && (
+              <div className="flex justify-between items-center text-xs text-stone-400">
+                <span>Stripe Transaction Ref:</span>
+                <span className="font-mono text-[11px] truncate max-w-[200px]">
+                  {placedOrder.stripePaymentIntentId}
+                </span>
+              </div>
+            )}
 
             <div className="flex justify-between items-center text-sm">
               <span className="text-stone-500">Delivery To:</span>
@@ -200,7 +298,6 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({ onNavigate }) => {
               </span>
             </div>
 
-            {/* Item list snapshot */}
             <div className="pt-3 border-t border-stone-200 space-y-2">
               <p className="text-xs font-bold text-stone-500 uppercase tracking-wider">Ordered Dishes:</p>
               {placedOrder.items.map((i, idx) => (
@@ -242,7 +339,7 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({ onNavigate }) => {
           Delivery Checkout
         </h1>
         <p className="text-stone-500 text-sm mt-1">
-          Review your address and confirm your Cash on Delivery meal.
+          Review your address, choose your payment method, and confirm your meal.
         </p>
       </div>
 
@@ -290,169 +387,233 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({ onNavigate }) => {
       )}
 
       {/* Checkout Form & Review Grid */}
-      <form onSubmit={handleSubmitOrder}>
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
-          {/* Left Form: Delivery Details */}
-          <div className="lg:col-span-7 bg-white rounded-3xl p-6 sm:p-8 border border-stone-200/90 shadow-xs space-y-6">
-            <h2 className="text-xl font-bold font-['Playfair_Display',serif] text-stone-900 border-b border-stone-100 pb-3 flex items-center gap-2">
-              <MapPin className="w-5 h-5 text-orange-600" />
-              <span>1. Delivery Destination</span>
-            </h2>
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
+        {/* Left Form: Delivery & Payment Details */}
+        <div className="lg:col-span-7 bg-white rounded-3xl p-6 sm:p-8 border border-stone-200/90 shadow-xs space-y-6">
+          <h2 className="text-xl font-bold font-['Playfair_Display',serif] text-stone-900 border-b border-stone-100 pb-3 flex items-center gap-2">
+            <MapPin className="w-5 h-5 text-orange-600" />
+            <span>1. Delivery Destination</span>
+          </h2>
 
-            <div className="space-y-4">
-              <div>
-                <label className="block text-xs font-bold text-stone-700 uppercase tracking-wider mb-1.5">
-                  Full Customer Name <span className="text-rose-500">*</span>
-                </label>
-                <input
-                  type="text"
-                  required
-                  value={customerName}
-                  onChange={(e) => setCustomerName(e.target.value)}
-                  placeholder="e.g. Alex Henderson"
-                  className="w-full px-4 py-3 bg-stone-50 border border-stone-200 rounded-2xl text-sm focus:outline-none focus:ring-2 focus:ring-orange-500 focus:bg-white text-stone-900"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold text-stone-700 uppercase tracking-wider mb-1.5">
-                  Contact Phone Number <span className="text-rose-500">*</span>
-                </label>
-                <div className="relative">
-                  <Phone className="w-4 h-4 text-stone-400 absolute left-4 top-1/2 -translate-y-1/2" />
-                  <input
-                    type="tel"
-                    required
-                    value={customerPhone}
-                    onChange={(e) => setCustomerPhone(e.target.value)}
-                    placeholder="+353 87 123 4567"
-                    className="w-full pl-11 pr-4 py-3 bg-stone-50 border border-stone-200 rounded-2xl text-sm focus:outline-none focus:ring-2 focus:ring-orange-500 focus:bg-white text-stone-900"
-                  />
-                </div>
-                <p className="text-[11px] text-stone-400 mt-1">Our driver will call this number when arriving.</p>
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold text-stone-700 uppercase tracking-wider mb-1.5">
-                  Complete Street Address <span className="text-rose-500">*</span>
-                </label>
-                <textarea
-                  required
-                  rows={3}
-                  value={deliveryAddress}
-                  onChange={(e) => setDeliveryAddress(e.target.value)}
-                  placeholder="Street name, building/apartment number, floor, postal code (e.g. 15 Grafton Street, Apt 3B, Dublin D02)"
-                  className="w-full px-4 py-3 bg-stone-50 border border-stone-200 rounded-2xl text-sm focus:outline-none focus:ring-2 focus:ring-orange-500 focus:bg-white text-stone-900 resize-none"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold text-stone-700 uppercase tracking-wider mb-1.5">
-                  Delivery Notes / Instructions <span className="text-stone-400 font-normal">(Optional)</span>
-                </label>
-                <input
-                  type="text"
-                  value={deliveryInstructions}
-                  onChange={(e) => setDeliveryInstructions(e.target.value)}
-                  placeholder="e.g. Ring Apt 3B buzzer, leave at front door, extra napkins"
-                  className="w-full px-4 py-3 bg-stone-50 border border-stone-200 rounded-2xl text-sm focus:outline-none focus:ring-2 focus:ring-orange-500 focus:bg-white text-stone-900"
-                />
-              </div>
-
-              <label className="flex items-center gap-2 pt-2 cursor-pointer select-none">
-                <input
-                  type="checkbox"
-                  checked={saveAsDefault}
-                  onChange={(e) => setSaveAsDefault(e.target.checked)}
-                  className="w-4 h-4 text-orange-600 rounded-sm accent-orange-600"
-                />
-                <span className="text-xs text-stone-600 font-medium">
-                  Save this phone and address to my customer profile for faster future checkout
-                </span>
+          <div className="space-y-4">
+            <div>
+              <label className="block text-xs font-bold text-stone-700 uppercase tracking-wider mb-1.5">
+                Full Customer Name <span className="text-rose-500">*</span>
               </label>
+              <input
+                type="text"
+                required
+                value={customerName}
+                onChange={(e) => setCustomerName(e.target.value)}
+                placeholder="e.g. Alex Henderson"
+                className="w-full px-4 py-3 bg-stone-50 border border-stone-200 rounded-2xl text-sm focus:outline-none focus:ring-2 focus:ring-orange-500 focus:bg-white text-stone-900"
+              />
             </div>
 
-            {/* Payment Method Section */}
-            <div className="pt-6 border-t border-stone-100 space-y-3">
-              <h3 className="text-lg font-bold font-['Playfair_Display',serif] text-stone-900 flex items-center gap-2">
-                <Truck className="w-5 h-5 text-orange-600" />
-                <span>2. Payment Method</span>
-              </h3>
-
-              <div className="p-4 rounded-2xl border-2 border-orange-500 bg-orange-50/50 flex items-start gap-3">
+            <div>
+              <label className="block text-xs font-bold text-stone-700 uppercase tracking-wider mb-1.5">
+                Contact Phone Number <span className="text-rose-500">*</span>
+              </label>
+              <div className="relative">
+                <Phone className="w-4 h-4 text-stone-400 absolute left-4 top-1/2 -translate-y-1/2" />
                 <input
-                  type="radio"
-                  name="payment"
-                  checked
-                  readOnly
-                  className="mt-1 w-4 h-4 text-orange-600 accent-orange-600"
+                  type="tel"
+                  required
+                  value={customerPhone}
+                  onChange={(e) => setCustomerPhone(e.target.value)}
+                  placeholder="+353 87 123 4567"
+                  className="w-full pl-11 pr-4 py-3 bg-stone-50 border border-stone-200 rounded-2xl text-sm focus:outline-none focus:ring-2 focus:ring-orange-500 focus:bg-white text-stone-900"
                 />
-                <div>
-                  <p className="font-bold text-sm text-stone-900">Cash on Delivery (COD)</p>
-                  <p className="text-xs text-stone-600 mt-0.5 leading-relaxed">
-                    Practice mode: Pay in cash directly to our delivery courier when receiving your hot food order.
-                  </p>
+              </div>
+              <p className="text-[11px] text-stone-400 mt-1">Our driver will call this number when arriving.</p>
+            </div>
+
+            <div>
+              <label className="block text-xs font-bold text-stone-700 uppercase tracking-wider mb-1.5">
+                Complete Street Address <span className="text-rose-500">*</span>
+              </label>
+              <textarea
+                required
+                rows={3}
+                value={deliveryAddress}
+                onChange={(e) => setDeliveryAddress(e.target.value)}
+                placeholder="Street name, building/apartment number, floor, postal code (e.g. 15 Grafton Street, Apt 3B, Dublin D02)"
+                className="w-full px-4 py-3 bg-stone-50 border border-stone-200 rounded-2xl text-sm focus:outline-none focus:ring-2 focus:ring-orange-500 focus:bg-white text-stone-900 resize-none"
+              />
+            </div>
+
+            <div>
+              <label className="block text-xs font-bold text-stone-700 uppercase tracking-wider mb-1.5">
+                Delivery Notes / Instructions <span className="text-stone-400 font-normal">(Optional)</span>
+              </label>
+              <input
+                type="text"
+                value={deliveryInstructions}
+                onChange={(e) => setDeliveryInstructions(e.target.value)}
+                placeholder="e.g. Ring Apt 3B buzzer, leave at front door, extra napkins"
+                className="w-full px-4 py-3 bg-stone-50 border border-stone-200 rounded-2xl text-sm focus:outline-none focus:ring-2 focus:ring-orange-500 focus:bg-white text-stone-900"
+              />
+            </div>
+
+            <label className="flex items-center gap-2 pt-2 cursor-pointer select-none">
+              <input
+                type="checkbox"
+                checked={saveAsDefault}
+                onChange={(e) => setSaveAsDefault(e.target.checked)}
+                className="w-4 h-4 text-orange-600 rounded-sm accent-orange-600"
+              />
+              <span className="text-xs text-stone-600 font-medium">
+                Save this phone and address to my customer profile for faster future checkout
+              </span>
+            </label>
+          </div>
+
+          {/* Payment Method Selection */}
+          <div className="pt-6 border-t border-stone-100 space-y-4">
+            <h3 className="text-lg font-bold font-['Playfair_Display',serif] text-stone-900 flex items-center gap-2">
+              <CreditCard className="w-5 h-5 text-orange-600" />
+              <span>2. Choose Payment Method</span>
+            </h3>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              {/* Option: Stripe Card Payment */}
+              <div
+                onClick={() => setPaymentMethod('card')}
+                className={`p-4 rounded-2xl border-2 cursor-pointer transition-all ${
+                  paymentMethod === 'card'
+                    ? 'border-orange-500 bg-orange-50/60 shadow-xs'
+                    : 'border-stone-200 bg-white hover:border-stone-300'
+                }`}
+              >
+                <div className="flex items-center justify-between mb-1.5">
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="radio"
+                      name="paymentChoice"
+                      checked={paymentMethod === 'card'}
+                      onChange={() => setPaymentMethod('card')}
+                      className="w-4 h-4 text-orange-600 accent-orange-600"
+                    />
+                    <span className="font-bold text-sm text-stone-900">Online Card (Stripe)</span>
+                  </div>
+                  <span className="px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-emerald-100 text-emerald-800">
+                    INSTANT
+                  </span>
                 </div>
+                <p className="text-[11px] text-stone-500 pl-6 leading-relaxed">
+                  Pay securely with Visa, Mastercard, American Express, or Google Pay.
+                </p>
+              </div>
+
+              {/* Option: Cash on Delivery */}
+              <div
+                onClick={() => setPaymentMethod('cod')}
+                className={`p-4 rounded-2xl border-2 cursor-pointer transition-all ${
+                  paymentMethod === 'cod'
+                    ? 'border-orange-500 bg-orange-50/60 shadow-xs'
+                    : 'border-stone-200 bg-white hover:border-stone-300'
+                }`}
+              >
+                <div className="flex items-center justify-between mb-1.5">
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="radio"
+                      name="paymentChoice"
+                      checked={paymentMethod === 'cod'}
+                      onChange={() => setPaymentMethod('cod')}
+                      className="w-4 h-4 text-orange-600 accent-orange-600"
+                    />
+                    <span className="font-bold text-sm text-stone-900">Cash on Delivery</span>
+                  </div>
+                  <span className="px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-amber-100 text-amber-800">
+                    COD
+                  </span>
+                </div>
+                <p className="text-[11px] text-stone-500 pl-6 leading-relaxed">
+                  Pay the delivery driver directly in exact cash upon food arrival.
+                </p>
+              </div>
+            </div>
+
+            {/* Embedded Stripe Card Element or COD Form Action */}
+            {paymentMethod === 'card' && (
+              <div className="pt-2">
+                <Elements stripe={stripePromise}>
+                  <StripeCardForm
+                    amount={total}
+                    customerName={customerName}
+                    customerEmail={currentUser.email || ''}
+                    customerPhone={customerPhone}
+                    isProcessing={submitting}
+                    onSuccess={handleStripeSuccess}
+                    onError={(msg) => setOrderError(msg)}
+                  />
+                </Elements>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Right Order Review Box */}
+        <div className="lg:col-span-5 bg-white rounded-3xl p-6 sm:p-8 border border-stone-200/90 shadow-md space-y-6 sticky top-28">
+          <h2 className="text-xl font-bold font-['Playfair_Display',serif] text-stone-900 border-b border-stone-100 pb-3 flex items-center gap-2">
+            <UtensilsCrossed className="w-5 h-5 text-orange-600" />
+            <span>Order Summary</span>
+          </h2>
+
+          {/* Items Snapshot */}
+          <div className="space-y-3 max-h-60 overflow-y-auto pr-1">
+            {items.map((item) => (
+              <div key={item.productId} className="flex items-center justify-between gap-3 text-xs">
+                <div className="flex items-center gap-2.5">
+                  <span className="w-6 h-6 rounded-lg bg-orange-100 text-orange-800 font-extrabold flex items-center justify-center shrink-0">
+                    {item.quantity}x
+                  </span>
+                  <span className="font-semibold text-stone-800 truncate max-w-[160px]">
+                    {item.name}
+                  </span>
+                </div>
+                <span className="font-bold text-stone-900">
+                  €{(item.price * item.quantity).toFixed(2)}
+                </span>
+              </div>
+            ))}
+          </div>
+
+          {/* Financial Calculations */}
+          <div className="pt-4 border-t border-stone-200 space-y-2.5 text-sm text-stone-600">
+            <div className="flex justify-between">
+              <span>Food & Drinks Subtotal</span>
+              <span className="font-bold text-stone-900">€{subtotal.toFixed(2)}</span>
+            </div>
+            <div className="flex justify-between">
+              <span>Thermal Delivery Fee</span>
+              <span className="font-bold text-stone-900">€{deliveryFee.toFixed(2)}</span>
+            </div>
+            <div className="pt-3 border-t border-stone-200 flex justify-between items-baseline text-stone-900">
+              <span className="font-bold text-base">Grand Total</span>
+              <div className="text-right">
+                <span className="text-2xl font-extrabold text-orange-600">€{total.toFixed(2)}</span>
+                <span className="block text-[11px] text-stone-400">
+                  {paymentMethod === 'card' ? 'Securely charged via Stripe' : 'Cash due upon delivery'}
+                </span>
               </div>
             </div>
           </div>
 
-          {/* Right Order Review Box */}
-          <div className="lg:col-span-5 bg-white rounded-3xl p-6 sm:p-8 border border-stone-200/90 shadow-md space-y-6 sticky top-28">
-            <h2 className="text-xl font-bold font-['Playfair_Display',serif] text-stone-900 border-b border-stone-100 pb-3 flex items-center gap-2">
-              <UtensilsCrossed className="w-5 h-5 text-orange-600" />
-              <span>Order Summary</span>
-            </h2>
-
-            {/* Items Snapshot */}
-            <div className="space-y-3 max-h-60 overflow-y-auto pr-1">
-              {items.map((item) => (
-                <div key={item.productId} className="flex items-center justify-between gap-3 text-xs">
-                  <div className="flex items-center gap-2.5">
-                    <span className="w-6 h-6 rounded-lg bg-orange-100 text-orange-800 font-extrabold flex items-center justify-center shrink-0">
-                      {item.quantity}x
-                    </span>
-                    <span className="font-semibold text-stone-800 truncate max-w-[160px]">
-                      {item.name}
-                    </span>
-                  </div>
-                  <span className="font-bold text-stone-900">
-                    €{(item.price * item.quantity).toFixed(2)}
-                  </span>
-                </div>
-              ))}
+          {/* Error Message */}
+          {orderError && (
+            <div className="p-3.5 rounded-2xl bg-rose-50 border border-rose-200 text-rose-800 text-xs flex items-start gap-2">
+              <AlertCircle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
+              <span>{orderError}</span>
             </div>
+          )}
 
-            {/* Financial Calculations */}
-            <div className="pt-4 border-t border-stone-200 space-y-2.5 text-sm text-stone-600">
-              <div className="flex justify-between">
-                <span>Food & Drinks Subtotal</span>
-                <span className="font-bold text-stone-900">€{subtotal.toFixed(2)}</span>
-              </div>
-              <div className="flex justify-between">
-                <span>Thermal Delivery Fee</span>
-                <span className="font-bold text-stone-900">€{deliveryFee.toFixed(2)}</span>
-              </div>
-              <div className="pt-3 border-t border-stone-200 flex justify-between items-baseline text-stone-900">
-                <span className="font-bold text-base">Grand Total</span>
-                <div className="text-right">
-                  <span className="text-2xl font-extrabold text-orange-600">€{total.toFixed(2)}</span>
-                  <span className="block text-[11px] text-stone-400">Cash due upon delivery</span>
-                </div>
-              </div>
-            </div>
-
-            {/* Error Message */}
-            {orderError && (
-              <div className="p-3.5 rounded-2xl bg-rose-50 border border-rose-200 text-rose-800 text-xs flex items-start gap-2">
-                <AlertCircle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
-                <span>{orderError}</span>
-              </div>
-            )}
-
-            {/* Submit Button */}
+          {/* Cash on Delivery Submit Button (Card Submit is handled inside StripeCardForm) */}
+          {paymentMethod === 'cod' && (
             <button
-              type="submit"
+              type="button"
+              onClick={handleCODSubmit}
               disabled={submitting || !isEmailVerified}
               className={`w-full py-4 rounded-2xl font-extrabold text-base shadow-lg flex items-center justify-center gap-2 transition-all ${
                 submitting || !isEmailVerified
@@ -463,22 +624,25 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({ onNavigate }) => {
               {submitting ? (
                 <>
                   <RefreshCw className="w-5 h-5 animate-spin" />
-                  <span>Validating & Placing Order...</span>
+                  <span>Placing Cash on Delivery Order...</span>
                 </>
               ) : (
                 <>
-                  <span>Confirm & Place Order</span>
+                  <Truck className="w-5 h-5" />
+                  <span>Confirm Cash on Delivery Order</span>
                   <ArrowRight className="w-5 h-5" />
                 </>
               )}
             </button>
+          )}
 
-            <p className="text-[11px] text-stone-400 text-center">
-              By confirming, you agree to pay the courier in cash upon receiving your order.
-            </p>
-          </div>
+          <p className="text-[11px] text-stone-400 text-center">
+            {paymentMethod === 'card'
+              ? 'Card transactions are encrypted via 256-bit SSL and processed directly by Stripe.'
+              : 'By confirming, you agree to pay the courier in cash upon receiving your order.'}
+          </p>
         </div>
-      </form>
+      </div>
     </div>
   );
 };
