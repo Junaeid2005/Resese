@@ -230,9 +230,9 @@ setAdminRole('TARGET_USER_UID');`;
             <p>
               In your Netlify Site Configuration → <strong>Environment variables</strong>, add:
               <br />
-              • <code>STRIPE_SECRET_KEY</code>: <code>sk_live_...</code> (or your test key <code>sk_test_...</code>)
+              • <code>STRIPE_SECRET_KEY</code>: your Stripe Secret Key from your Stripe Dashboard
               <br />
-              • <code>VITE_STRIPE_PUBLISHABLE_KEY</code>: <code>pk_live_...</code> (or test key <code>pk_test_...</code>)
+              • <code>VITE_STRIPE_PUBLISHABLE_KEY</code>: your Stripe Publishable Key from your Stripe Dashboard
             </p>
           </div>
         </div>
