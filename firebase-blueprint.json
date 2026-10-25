@@ -1,0 +1,363 @@
+{
+  "entities": {
+    "MenuItem": {
+      "title": "MenuItem",
+      "description": "A food or drink menu item available in the restaurant",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier of the menu item"
+        },
+        "name": {
+          "type": "string",
+          "description": "Name of the dish or drink",
+          "maxLength": 100
+        },
+        "description": {
+          "type": "string",
+          "description": "Detailed description of ingredients and preparation",
+          "maxLength": 500
+        },
+        "imageUrl": {
+          "type": "string",
+          "description": "URL of the dish photo",
+          "maxLength": 1000
+        },
+        "category": {
+          "type": "string",
+          "description": "Category name",
+          "enum": ["Burgers", "Pizza", "Pasta", "Sides", "Drinks"]
+        },
+        "sellingPrice": {
+          "type": "number",
+          "description": "Customer retail price in euros"
+        },
+        "costPrice": {
+          "type": "number",
+          "description": "Admin raw preparation and food cost price in euros"
+        },
+        "isAvailable": {
+          "type": "boolean",
+          "description": "Whether the dish is currently in stock and orderable"
+        },
+        "createdAt": {
+          "type": "string",
+          "description": "ISO timestamp of creation"
+        },
+        "updatedAt": {
+          "type": "string",
+          "description": "ISO timestamp of last update"
+        }
+      },
+      "required": ["id", "name", "description", "category", "sellingPrice", "isAvailable", "createdAt"]
+    },
+    "Cart": {
+      "title": "Cart",
+      "description": "Persistent customer shopping cart",
+      "type": "object",
+      "properties": {
+        "userId": {
+          "type": "string",
+          "description": "UID of the customer who owns this cart"
+        },
+        "items": {
+          "type": "array",
+          "description": "List of cart line items"
+        },
+        "updatedAt": {
+          "type": "string",
+          "description": "ISO timestamp of last cart update"
+        }
+      },
+      "required": ["userId", "items"]
+    },
+    "Order": {
+      "title": "Order",
+      "description": "Customer food order with immutable snapshot of items and prices",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique order reference code"
+        },
+        "customerId": {
+          "type": "string",
+          "description": "UID of customer placing order"
+        },
+        "customerName": {
+          "type": "string",
+          "description": "Full name of customer",
+          "maxLength": 100
+        },
+        "customerEmail": {
+          "type": "string",
+          "description": "Email address of customer",
+          "maxLength": 150
+        },
+        "customerPhone": {
+          "type": "string",
+          "description": "Contact phone number for delivery driver",
+          "maxLength": 30
+        },
+        "deliveryAddress": {
+          "type": "string",
+          "description": "Physical delivery destination",
+          "maxLength": 300
+        },
+        "deliveryInstructions": {
+          "type": "string",
+          "description": "Gate codes, buzzer, or special delivery instructions",
+          "maxLength": 500
+        },
+        "items": {
+          "type": "array",
+          "description": "Frozen snapshot of items, quantities, and prices at order time"
+        },
+        "subtotal": {
+          "type": "number",
+          "description": "Sum of item unit prices multiplied by quantities"
+        },
+        "deliveryFee": {
+          "type": "number",
+          "description": "Fixed delivery charge"
+        },
+        "total": {
+          "type": "number",
+          "description": "Final payable amount in euros"
+        },
+        "paymentMethod": {
+          "type": "string",
+          "description": "Selected payment method (Cash on Delivery)",
+          "enum": ["Cash on Delivery"]
+        },
+        "paymentStatus": {
+          "type": "string",
+          "description": "Whether payment has been collected",
+          "enum": ["unpaid", "paid"]
+        },
+        "status": {
+          "type": "string",
+          "description": "Current lifecycle status of the order",
+          "enum": ["pending", "confirmed", "preparing", "ready", "out_for_delivery", "delivered", "cancelled"]
+        },
+        "createdAt": {
+          "type": "string",
+          "description": "ISO timestamp of order submission"
+        },
+        "updatedAt": {
+          "type": "string",
+          "description": "ISO timestamp of status update"
+        }
+      },
+      "required": ["id", "customerId", "customerName", "customerEmail", "customerPhone", "deliveryAddress", "items", "subtotal", "total", "status", "paymentMethod", "paymentStatus", "createdAt"]
+    },
+    "Expense": {
+      "title": "Expense",
+      "description": "Restaurant operational expense recorded by managers",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Expense record identifier"
+        },
+        "title": {
+          "type": "string",
+          "description": "Expense description or vendor name",
+          "maxLength": 150
+        },
+        "category": {
+          "type": "string",
+          "description": "Operational expense classification",
+          "enum": ["Ingredients", "Utilities", "Salaries", "Rent", "Marketing", "Packaging", "Equipment", "Delivery", "Other"]
+        },
+        "amount": {
+          "type": "number",
+          "description": "Cost amount in euros"
+        },
+        "date": {
+          "type": "string",
+          "description": "Date of expense (YYYY-MM-DD)"
+        },
+        "notes": {
+          "type": "string",
+          "description": "Optional notes or receipt references",
+          "maxLength": 500
+        },
+        "recordedBy": {
+          "type": "string",
+          "description": "UID or email of the recording admin"
+        },
+        "createdAt": {
+          "type": "string",
+          "description": "ISO timestamp of entry"
+        }
+      },
+      "required": ["id", "title", "category", "amount", "date", "createdAt"]
+    },
+    "RestaurantSettings": {
+      "title": "RestaurantSettings",
+      "description": "Global restaurant profile, branding, contacts, and delivery fees",
+      "type": "object",
+      "properties": {
+        "restaurantName": {
+          "type": "string",
+          "description": "Brand trade name",
+          "maxLength": 100
+        },
+        "logoUrl": {
+          "type": "string",
+          "description": "URL to brand logo icon",
+          "maxLength": 1000
+        },
+        "description": {
+          "type": "string",
+          "description": "Short bio for hero & footer",
+          "maxLength": 500
+        },
+        "phone": {
+          "type": "string",
+          "description": "Contact phone line",
+          "maxLength": 30
+        },
+        "email": {
+          "type": "string",
+          "description": "Contact and customer support email",
+          "maxLength": 100
+        },
+        "address": {
+          "type": "string",
+          "description": "Physical restaurant street address",
+          "maxLength": 200
+        },
+        "openingHours": {
+          "type": "string",
+          "description": "Business schedule summary",
+          "maxLength": 200
+        },
+        "deliveryFee": {
+          "type": "number",
+          "description": "Standard delivery fee in euros"
+        },
+        "promoBannerText": {
+          "type": "string",
+          "description": "Announcement banner displayed on homepage",
+          "maxLength": 300
+        },
+        "updatedAt": {
+          "type": "string",
+          "description": "ISO timestamp of last update"
+        }
+      },
+      "required": ["restaurantName", "phone", "email", "address", "openingHours", "deliveryFee"]
+    },
+    "Admin": {
+      "title": "Admin",
+      "description": "Authorized administrator record",
+      "type": "object",
+      "properties": {
+        "userId": {
+          "type": "string",
+          "description": "UID of the admin user"
+        },
+        "email": {
+          "type": "string",
+          "description": "Email address of the admin"
+        },
+        "role": {
+          "type": "string",
+          "description": "Admin clearance level",
+          "enum": ["admin", "superadmin"]
+        },
+        "createdAt": {
+          "type": "string",
+          "description": "ISO timestamp of granting admin role"
+        }
+      },
+      "required": ["userId", "email", "role"]
+    },
+    "UserProfile": {
+      "title": "UserProfile",
+      "description": "Customer private profile and default delivery information",
+      "type": "object",
+      "properties": {
+        "userId": {
+          "type": "string",
+          "description": "UID of user"
+        },
+        "email": {
+          "type": "string",
+          "description": "Customer email"
+        },
+        "displayName": {
+          "type": "string",
+          "description": "Customer full name",
+          "maxLength": 100
+        },
+        "phone": {
+          "type": "string",
+          "description": "Default contact phone",
+          "maxLength": 30
+        },
+        "address": {
+          "type": "string",
+          "description": "Default delivery address",
+          "maxLength": 300
+        },
+        "createdAt": {
+          "type": "string",
+          "description": "ISO timestamp of account creation"
+        },
+        "updatedAt": {
+          "type": "string",
+          "description": "ISO timestamp of profile update"
+        }
+      },
+      "required": ["userId", "email"]
+    }
+  },
+  "firestore": {
+    "/menuItems/{itemId}": {
+      "schema": {
+        "$ref": "MenuItem"
+      },
+      "description": "Public food and drink items catalog. Readable by all, writable only by admins."
+    },
+    "/carts/{userId}": {
+      "schema": {
+        "$ref": "Cart"
+      },
+      "description": "Customer persistent shopping cart document. Isolated per user UID."
+    },
+    "/orders/{orderId}": {
+      "schema": {
+        "$ref": "Order"
+      },
+      "description": "Customer orders. Customer can create and read their own orders; admins can read and update status."
+    },
+    "/expenses/{expenseId}": {
+      "schema": {
+        "$ref": "Expense"
+      },
+      "description": "Operating expenses. Restricted strictly to authorized restaurant administrators."
+    },
+    "/restaurantSettings/{settingId}": {
+      "schema": {
+        "$ref": "RestaurantSettings"
+      },
+      "description": "Global settings for restaurant branding, fees, and contact info. Publicly readable, admin writable."
+    },
+    "/admins/{userId}": {
+      "schema": {
+        "$ref": "Admin"
+      },
+      "description": "List of authorized administrator UIDs. Readable by authenticated users to verify permissions; writable only by superadmin or bootstrapped admin."
+    },
+    "/users/{userId}": {
+      "schema": {
+        "$ref": "UserProfile"
+      },
+      "description": "User profile with contact and delivery defaults. Isolated to the specific user and admins."
+    }
+  }
+}

@@ -1,0 +1,80 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Default deny catch-all
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Helper functions
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isEmailVerified() {
+      return isSignedIn() && (
+        request.auth.token.email_verified == true ||
+        request.auth.token.firebase.sign_in_provider == 'google.com'
+      );
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function isAdmin() {
+      return isSignedIn() && (
+        request.auth.token.email == 'junaeidshohan@gmail.com' ||
+        exists(/databases/$(database)/documents/admins/$(request.auth.uid))
+      );
+    }
+
+    // Connection testing
+    match /test/{docId} {
+      allow read: if true;
+    }
+
+    // Menu catalog: public read, admin write
+    match /menuItems/{itemId} {
+      allow read: if true;
+      allow create, update, delete: if isAdmin();
+    }
+
+    // Customer carts: strictly isolated to the authenticated owner
+    match /carts/{userId} {
+      allow read, write: if isOwner(userId);
+    }
+
+    // Orders: customer can read/create their own orders with verified email; admins can read all and update status
+    match /orders/{orderId} {
+      allow get: if isSignedIn() && (resource.data.customerId == request.auth.uid || isAdmin());
+      allow list: if isSignedIn() && (resource.data.customerId == request.auth.uid || isAdmin());
+      allow create: if isSignedIn() && isEmailVerified() && request.resource.data.customerId == request.auth.uid;
+      allow update, delete: if isAdmin();
+    }
+
+    // Restaurant expenses: confidential operational records, admin only
+    match /expenses/{expenseId} {
+      allow read, write: if isAdmin();
+    }
+
+    // Restaurant profile and branding settings: public read, admin write
+    match /restaurantSettings/{settingId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    // Administrator records: authenticated users can check their own admin status; superadmin/bootstrapped admin can manage
+    match /admins/{userId} {
+      allow read: if isSignedIn();
+      allow write: if isAdmin() || (isSignedIn() && request.auth.token.email == 'junaeidshohan@gmail.com');
+    }
+
+    // Customer profile info: owner or admin read, owner write
+    match /users/{userId} {
+      allow read: if isSignedIn() && (request.auth.uid == userId || isAdmin());
+      allow write: if isOwner(userId);
+    }
+  }
+}
