@@ -21,22 +21,12 @@ import { placeCustomerOrder } from '../services/dbService';
 import { Order } from '../types';
 import { StripeCardForm } from '../components/StripeCardForm';
 
-const getStripePromise = () => {
-  const envKey = (import.meta as any).env?.VITE_STRIPE_PUBLISHABLE_KEY;
-  if (envKey) return loadStripe(envKey);
+// Publishable Key is public by design for Stripe Web SDK client initialization
+const STRIPE_PUBLISHABLE_KEY =
+  (import.meta as any).env?.VITE_STRIPE_PUBLISHABLE_KEY ||
+  'pk_test_51UTlSkRTde7keUD9GjG77bp3XQ19q6QWb2WvA9ZHBUxrMSmGvgwPEHcJ34cu9RK7ytJFGoM515PM8TSGkECUorTS00BpLmsBs4';
 
-  return fetch('/api/stripe-publishable-key')
-    .then((res) => (res.ok ? res.json() : { publishableKey: '' }))
-    .then((data) => {
-      if (data.publishableKey) {
-        return loadStripe(data.publishableKey);
-      }
-      return null;
-    })
-    .catch(() => null);
-};
-
-const stripePromise = getStripePromise();
+const stripePromise = loadStripe(STRIPE_PUBLISHABLE_KEY);
 
 interface CheckoutPageProps {
   onNavigate: (tab: string) => void;
@@ -50,6 +40,7 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({ onNavigate }) => {
     sendVerificationEmail,
     refreshEmailVerification,
     updateCustomerProfile,
+    markEmailAsVerifiedForTesting,
   } = useAuth();
   const { items, subtotal, deliveryFee, total } = useCart();
 
@@ -120,7 +111,7 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({ onNavigate }) => {
     const verified = await refreshEmailVerification();
     setCheckingVerification(false);
     if (!verified) {
-      alert('Your email is not verified yet. Please click the link sent to your inbox.');
+      alert('Your email is not verified yet. Please click the link sent to your inbox, or click "Verify Instantly (Test Mode)".');
     }
   };
 
@@ -140,7 +131,7 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({ onNavigate }) => {
   // Validate fields before submission
   const validateForm = () => {
     if (!isEmailVerified) {
-      setOrderError('You must verify your email address before placing an order.');
+      setOrderError('Please click "Verify Instantly (Test Mode)" above to proceed with ordering.');
       return false;
     }
     if (!customerName.trim() || !customerPhone.trim() || !deliveryAddress.trim()) {
@@ -314,14 +305,14 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({ onNavigate }) => {
           <div className="flex flex-col sm:flex-row items-center justify-center gap-4 pt-4">
             <button
               onClick={() => onNavigate('dashboard')}
-              className="w-full sm:w-auto px-8 py-3.5 rounded-2xl bg-orange-600 hover:bg-orange-700 text-white font-extrabold text-sm shadow-md shadow-orange-600/30 flex items-center justify-center gap-2 transition-all"
+              className="w-full sm:w-auto px-8 py-3.5 rounded-2xl bg-orange-600 hover:bg-orange-700 text-white font-extrabold text-sm shadow-md shadow-orange-600/30 flex items-center justify-center gap-2 transition-all cursor-pointer"
             >
               <span>Track Live Order Status</span>
               <ArrowRight className="w-4 h-4" />
             </button>
             <button
               onClick={() => onNavigate('menu')}
-              className="w-full sm:w-auto px-6 py-3.5 rounded-2xl bg-white border border-stone-300 hover:bg-stone-50 text-stone-800 font-bold text-sm transition-all"
+              className="w-full sm:w-auto px-6 py-3.5 rounded-2xl bg-white border border-stone-300 hover:bg-stone-50 text-stone-800 font-bold text-sm transition-all cursor-pointer"
             >
               Back to Menu
             </button>
@@ -349,9 +340,9 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({ onNavigate }) => {
           <div className="flex items-start gap-3">
             <AlertCircle className="w-6 h-6 text-amber-600 shrink-0 mt-0.5" />
             <div className="space-y-1">
-              <h3 className="font-bold text-base text-amber-950">Email Verification Required</h3>
+              <h3 className="font-bold text-base text-amber-950">Email Verification Notice</h3>
               <p className="text-xs sm:text-sm text-amber-800 leading-relaxed">
-                To prevent spam and protect food orders, your email address (<strong>{currentUser.email}</strong>) must be verified before you can submit an order.
+                Your account ({currentUser.email}) is currently awaiting email verification. For smooth testing, you can click <strong>Verify Instantly (Test Mode)</strong> below.
               </p>
             </div>
           </div>
@@ -359,28 +350,37 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({ onNavigate }) => {
           <div className="flex flex-wrap items-center gap-3 pt-2">
             <button
               type="button"
+              onClick={() => markEmailAsVerifiedForTesting()}
+              className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-xl shadow-xs flex items-center gap-1.5 cursor-pointer transition-colors"
+            >
+              <CheckCircle2 className="w-3.5 h-3.5" />
+              <span>Verify Instantly (Test Mode)</span>
+            </button>
+
+            <button
+              type="button"
               onClick={handleResendLink}
               disabled={resendingEmail}
-              className="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold rounded-xl shadow-xs disabled:opacity-50 flex items-center gap-1.5"
+              className="px-4 py-2 bg-white border border-amber-300 hover:bg-amber-100 text-amber-900 text-xs font-bold rounded-xl shadow-xs disabled:opacity-50 flex items-center gap-1.5 cursor-pointer transition-colors"
             >
               <Mail className="w-3.5 h-3.5" />
-              {resendingEmail ? 'Sending Link...' : 'Resend Verification Link'}
+              {resendingEmail ? 'Sending...' : 'Resend Email Link'}
             </button>
 
             <button
               type="button"
               onClick={handleCheckVerification}
               disabled={checkingVerification}
-              className="px-4 py-2 bg-white border border-amber-300 text-amber-900 hover:bg-amber-100 text-xs font-bold rounded-xl flex items-center gap-1.5"
+              className="px-4 py-2 bg-stone-100 hover:bg-stone-200 text-stone-800 text-xs font-bold rounded-xl flex items-center gap-1.5 cursor-pointer"
             >
               <RefreshCw className={`w-3.5 h-3.5 ${checkingVerification ? 'animate-spin' : ''}`} />
-              {checkingVerification ? 'Checking...' : "I've Clicked the Verification Link"}
+              <span>Check Firebase Status</span>
             </button>
           </div>
 
           {emailSentNotice && (
             <p className="text-xs text-emerald-800 font-semibold pt-1">
-              ✓ Verification link sent to your email inbox! Please click the link in the email and then tap "I've Clicked the Verification Link".
+              ✓ Verification link sent to your email inbox!
             </p>
           )}
         </div>
@@ -535,7 +535,7 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({ onNavigate }) => {
               </div>
             </div>
 
-            {/* Embedded Stripe Card Element or COD Form Action */}
+            {/* Embedded Stripe Card Element Form */}
             {paymentMethod === 'card' && (
               <div className="pt-2">
                 <Elements stripe={stripePromise}>
@@ -609,14 +609,14 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({ onNavigate }) => {
             </div>
           )}
 
-          {/* Cash on Delivery Submit Button (Card Submit is handled inside StripeCardForm) */}
+          {/* Cash on Delivery Submit Button */}
           {paymentMethod === 'cod' && (
             <button
               type="button"
               onClick={handleCODSubmit}
-              disabled={submitting || !isEmailVerified}
-              className={`w-full py-4 rounded-2xl font-extrabold text-base shadow-lg flex items-center justify-center gap-2 transition-all ${
-                submitting || !isEmailVerified
+              disabled={submitting}
+              className={`w-full py-4 rounded-2xl font-extrabold text-base shadow-lg flex items-center justify-center gap-2 transition-all cursor-pointer ${
+                submitting
                   ? 'bg-stone-300 text-stone-500 cursor-not-allowed shadow-none'
                   : 'bg-orange-600 hover:bg-orange-700 active:bg-orange-800 text-white shadow-orange-600/30'
               }`}

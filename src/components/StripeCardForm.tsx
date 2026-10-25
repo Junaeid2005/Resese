@@ -52,20 +52,32 @@ export const StripeCardForm: React.FC<StripeCardFormProps> = ({
 
   const handleCardPayment = async (e: React.FormEvent) => {
     e.preventDefault();
+    setCardError(null);
+
+    if (!customerName.trim() || !customerPhone.trim()) {
+      const err = 'Please enter your Full Name and Contact Phone Number in the delivery form above.';
+      setCardError(err);
+      onError(err);
+      return;
+    }
+
     if (!stripe || !elements) {
-      onError('Stripe is still loading. Please wait a moment and try again.');
+      const err = 'Stripe secure payment reader is still initializing. Please try again in 2 seconds.';
+      setCardError(err);
+      onError(err);
       return;
     }
 
     const cardElement = elements.getElement(CardElement);
     if (!cardElement) {
-      onError('Card input is not available.');
+      const err = 'Please enter your card number in the form below.';
+      setCardError(err);
+      onError(err);
       return;
     }
 
     try {
       setSubmitting(true);
-      setCardError(null);
 
       // 1. Request clientSecret from secure backend
       const res = await fetch('/api/create-payment-intent', {
@@ -86,17 +98,17 @@ export const StripeCardForm: React.FC<StripeCardFormProps> = ({
 
       if (!res.ok) {
         const errorData = await res.json().catch(() => ({}));
-        throw new Error(errorData.error || 'Failed to initiate secure payment');
+        throw new Error(errorData.error || 'Failed to initiate secure payment with server');
       }
 
-      const { clientSecret, id: intentId } = await res.json();
+      const { clientSecret } = await res.json();
 
       // 2. Confirm card payment securely through Stripe SDK
       const paymentResult = await stripe.confirmCardPayment(clientSecret, {
         payment_method: {
           card: cardElement,
           billing_details: {
-            name: customerName || 'Valued Diner',
+            name: customerName || 'Valued Customer',
             email: customerEmail || undefined,
             phone: customerPhone || undefined,
           },
@@ -164,22 +176,23 @@ export const StripeCardForm: React.FC<StripeCardFormProps> = ({
       {/* Test Mode Helper Info */}
       <div className="p-3 bg-amber-50/70 border border-amber-200/80 rounded-2xl text-[11px] text-amber-900 space-y-1">
         <div className="flex items-center justify-between font-bold">
-          <span>Stripe Test Mode Active</span>
+          <span>Stripe Test Mode Ready</span>
           <span className="font-mono text-[10px] bg-amber-200/60 px-1.5 py-0.5 rounded">
-            Card: 4242 4242 4242 4242
+            Test Card: 4242 •••• •••• 4242
           </span>
         </div>
         <p className="text-amber-800 text-[10px] leading-relaxed">
-          Use any future expiration (e.g. 12/30) and any 3-digit CVC (e.g. 123) to simulate a successful payment.
+          Card details: <strong>4242 4242 4242 4242</strong>, any future date (e.g. 12/30), CVC: <strong>123</strong>.
         </p>
       </div>
 
+      {/* Pay with Card Button */}
       <button
         type="button"
-        disabled={busy || !stripe}
+        disabled={busy}
         onClick={handleCardPayment}
-        className={`w-full py-4 rounded-2xl font-extrabold text-base shadow-lg flex items-center justify-center gap-2 transition-all ${
-          busy || !stripe
+        className={`w-full py-4 rounded-2xl font-extrabold text-base shadow-lg flex items-center justify-center gap-2 transition-all cursor-pointer ${
+          busy
             ? 'bg-stone-300 text-stone-500 cursor-not-allowed shadow-none'
             : 'bg-orange-600 hover:bg-orange-700 active:bg-orange-800 text-white shadow-orange-600/30'
         }`}

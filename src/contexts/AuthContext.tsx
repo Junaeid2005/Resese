@@ -30,6 +30,7 @@ interface AuthContextType {
   sendResetPasswordEmail: (email: string) => Promise<void>;
   signOutUser: () => Promise<void>;
   updateCustomerProfile: (data: Partial<UserProfile>) => Promise<void>;
+  markEmailAsVerifiedForTesting: () => void;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -219,6 +220,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setUserProfile((prev) => (prev ? { ...prev, ...data } : null));
   };
 
+  const markEmailAsVerifiedForTesting = () => {
+    setIsEmailVerified(true);
+  };
+
   return (
     <AuthContext.Provider
       value={{
@@ -237,6 +242,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         sendResetPasswordEmail,
         signOutUser,
         updateCustomerProfile,
+        markEmailAsVerifiedForTesting,
       }}
     >
       {children}
