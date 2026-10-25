@@ -12,14 +12,12 @@ const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 3000;
 
 app.use(express.json());
 
-// Stripe Secret Key with environment variable precedence and runtime test-key fallback
-const DEFAULT_TEST_SECRET = Buffer.from(
-  'c2tfdGVzdF81MVVUbFNrUlRkZTdrZVVEOTJuaUFEQlFWT1lJWGtkeVZRcTd4cHk3VEloZVdpSEhxZExEUW1heHZhT0ljbDZwZnFvaGpnYnNZNEtNT3hvaEE2WHVQM2NwdzAwdWNkOWRaQ0I=',
-  'base64'
-).toString('utf-8');
-
-const stripeSecretKey = process.env.STRIPE_SECRET_KEY || DEFAULT_TEST_SECRET;
-const stripe = stripeSecretKey ? new Stripe(stripeSecretKey) : null;
+// Stripe secret key is read strictly from the server-side environment variable
+const getStripeClient = () => {
+  const secretKey = process.env.STRIPE_SECRET_KEY;
+  if (!secretKey) return null;
+  return new Stripe(secretKey);
+};
 
 // Public API endpoint to provide the Stripe Publishable Key
 app.get('/api/stripe-publishable-key', (req, res) => {
@@ -31,6 +29,7 @@ app.get('/api/stripe-publishable-key', (req, res) => {
 // Endpoint to create a PaymentIntent for Stripe Elements
 app.post('/api/create-payment-intent', async (req, res) => {
   try {
+    const stripe = getStripeClient();
     if (!stripe) {
       return res.status(500).json({
         error: 'Stripe secret key is not configured. Please set STRIPE_SECRET_KEY in your environment variables.',

@@ -12,14 +12,12 @@ interface NetlifyResponse {
   body: string;
 }
 
-// Stripe Secret Key with environment variable precedence and runtime test-key fallback
-const DEFAULT_TEST_SECRET = Buffer.from(
-  'c2tfdGVzdF81MVVUbFNrUlRkZTdrZVVEOTJuaUFEQlFWT1lJWGtkeVZRcTd4cHk3VEloZVdpSEhxZExEUW1heHZhT0ljbDZwZnFvaGpnYnNZNEtNT3hvaEE2WHVQM2NwdzAwdWNkOWRaQ0I=',
-  'base64'
-).toString('utf-8');
-
-const stripeSecretKey = process.env.STRIPE_SECRET_KEY || DEFAULT_TEST_SECRET;
-const stripe = stripeSecretKey ? new Stripe(stripeSecretKey) : null;
+// Stripe secret key is read strictly from the server-side environment variable
+const getStripeClient = () => {
+  const secretKey = process.env.STRIPE_SECRET_KEY;
+  if (!secretKey) return null;
+  return new Stripe(secretKey);
+};
 
 export const handler = async (event: NetlifyEvent): Promise<NetlifyResponse> => {
   const headers = {
@@ -41,6 +39,7 @@ export const handler = async (event: NetlifyEvent): Promise<NetlifyResponse> => 
     };
   }
 
+  const stripe = getStripeClient();
   if (!stripe) {
     return {
       statusCode: 500,
